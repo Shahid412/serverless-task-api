@@ -1,0 +1,53 @@
+{
+  "name": "serverless-task-api",
+  "version": "1.0.0",
+  "description": "A serverless Task Management API using Node.js, TypeScript, and AWS services.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && esbuild src/handlers/*.ts --bundle --platform=node --target=node20 --outdir=dist/handlers",
+    "watch": "tsc -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "deploy": "cd infrastructure && cdk deploy",
+    "deploy:ci": "cd infrastructure && cdk deploy --require-approval never",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "serverless",
+    "aws",
+    "lambda",
+    "typescript",
+    "cognito",
+    "dynamodb",
+    "cdk"
+  ],
+  "author": "Shahid",
+  "license": "ISC",
+  "dependencies": {
+    "@types/aws-sdk": "^2.7.0",
+    "aws-cdk-lib": "^2.162.1",
+    "aws-sdk": "^2.1691.0",
+    "axios": "^1.7.7",
+    "constructs": "^10.0.0",
+    "dotenv": "^16.3.1",
+    "esbuild": "^0.24.0",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.114",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^22.7.5",
+    "@types/uuid": "^9.0.1",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "eslint": "^8.45.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

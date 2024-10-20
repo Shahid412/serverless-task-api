@@ -1,0 +1,6 @@
+{
+  "app": "npx ts-node infrastructure/bin/serverless-task-api.ts",
+  "context": {
+    "@aws-cdk/core:newStyleStackSynthesis": true
+  }
+}
