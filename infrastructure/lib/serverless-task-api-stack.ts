@@ -1,15 +1,13 @@
-// infrastructure/lib/serverless-task-api-stack.ts
-
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as path from 'path';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as path from 'path';
 import * as iam from 'aws-cdk-lib/aws-iam';
 
-export class ServerlessTaskApiStack extends cdk.Stack {
+export class ServerlessTaskApiStack2 extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, {
       ...props,
@@ -19,17 +17,18 @@ export class ServerlessTaskApiStack extends cdk.Stack {
       },
     });
 
-    // Cognito User Pool
+    // 1. Create a Cognito User Pool for authentication
     const userPool = new cognito.UserPool(this, 'TaskApiUserPool', {
       userPoolName: 'TaskApiUserPool',
       selfSignUpEnabled: true,
-      signInAliases: { username: true, email: false },
-      autoVerify: { email: false },
+      signInAliases: { username: true, email: true },
+      autoVerify: { email: true },
       standardAttributes: {
-        email: { required: false, mutable: true },
+        email: { required: true, mutable: false },
       },
     });
 
+    // Cognito User Pool Client for client-side integration
     const userPoolClient = new cognito.UserPoolClient(this, 'UserPoolClient', {
       userPool,
       generateSecret: false,
@@ -40,36 +39,50 @@ export class ServerlessTaskApiStack extends cdk.Stack {
       },
     });
 
+    // // 2. Create a DynamoDB table for users
+    // const usersTable = new dynamodb.Table(this, 'UsersTable', {
+    //   partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+    //   tableName: 'users',
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Not recommended for production use
+    // });
+
+    // // 3. Create a DynamoDB table for tasks
+    // const tasksTable = new dynamodb.Table(this, 'TasksTable', {
+    //   partitionKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
+    //   tableName: 'tasks',
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Not recommended for production use
+    // });
+
     // Referencing the existing DynamoDB Users Table
     const usersTable = dynamodb.Table.fromTableName(this, 'users', 'users');
 
     // Referencing the existing DynamoDB Tasks Table
     const tasksTable = dynamodb.Table.fromTableName(this, 'tasks', 'tasks');
 
-    // Create new tables on DynamoDB
-    // // DynamoDB Users Table
-    // const usersTable = new dynamodb.Table(this, 'users', {
-    //   tableName: 'users',
-    //   partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
-    //   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Retain for production
-    // });
+    // 4. Common environment variables for the Lambda functions
+    const commonEnv = {
+      USERS_TABLE_NAME: usersTable.tableName,
+      TASKS_TABLE_NAME: tasksTable.tableName,
+      USER_POOL_ID: userPool.userPoolId,
+      CLIENT_ID: userPoolClient.userPoolClientId,
+      NODE_OPTIONS: '--enable-source-maps',
+    };
 
-    // // DynamoDB Tasks Table
-    // const tasksTable = new dynamodb.Table(this, 'tasks', {
-    //   tableName: 'tasks',
-    //   partitionKey: { name: 'TaskId', type: dynamodb.AttributeType.STRING },
-    //   sortKey: { name: 'UserId', type: dynamodb.AttributeType.STRING }, // Reference to the users table
-    //   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Retain for production
-    // });
-
-    // // Adding a Global Secondary Index on UserId for querying tasks by user
-    // tasksTable.addGlobalSecondaryIndex({
-    //   indexName: 'UserId-index',
-    //   partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
-    //   projectionType: dynamodb.ProjectionType.ALL,
-    // });
+    // Cognito Admin Policy for Lambda functions
+    const cognitoAdminPolicy = new iam.PolicyStatement({
+      actions: [
+        'cognito-idp:AdminConfirmSignUp',
+        'cognito-idp:AdminInitiateAuth',
+        'cognito-idp:AdminRespondToAuthChallenge',
+        'cognito-idp:AdminUpdateUserAttributes',
+        'cognito-idp:AdminCreateUser',
+        'cognito-idp:AdminGetUser',
+        'cognito-idp:ListUsers',
+      ],
+      resources: [
+        `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${userPool.userPoolId}`,
+      ],
+    });
 
     // Lambda Layer for shared code (optional)
     const lambdaLayer = new lambda.LayerVersion(this, 'LambdaLayer', {
@@ -78,110 +91,41 @@ export class ServerlessTaskApiStack extends cdk.Stack {
       description: 'A layer to hold common utilities',
     });
 
-    // Common Lambda Environment Variables
-    const commonEnv = {
-      TASKS_TABLE_NAME: tasksTable.tableName,
-      USERS_TABLE_NAME: usersTable.tableName,
-      USER_POOL_ID: userPool.userPoolId,
-      CLIENT_ID: userPoolClient.userPoolClientId,
-      NODE_OPTIONS: '--enable-source-maps',
-    };
-
+    // 5. Register Lambda function
     const registerFunction = new lambda.Function(this, 'RegisterFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'auth.register', // Pointing to `register` in `auth.ts`
+      handler: 'auth.register',
       code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
       environment: commonEnv,
       layers: [lambdaLayer],
+      initialPolicy: [
+        cognitoAdminPolicy,
+        new iam.PolicyStatement({
+          actions: ['dynamodb:*'],
+          resources: [usersTable.tableArn, tasksTable.tableArn],
+        }),
+      ],
     });
 
-    registerFunction.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: [
-          'cognito-idp:AdminInitiateAuth',
-          'cognito-idp:AdminConfirmSignUp',
-        ],
-        resources: [
-          `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${userPool.userPoolId}`,
-        ],
-      })
-    );
-
+    // 6. Login Lambda function
     const loginFunction = new lambda.Function(this, 'LoginFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'auth.login', // Pointing to `login` in `auth.ts`
+      handler: 'auth.login',
       code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
       environment: commonEnv,
-      layers: [lambdaLayer],
+      initialPolicy: [
+        cognitoAdminPolicy,
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem', 'dynamodb:Query'],
+          resources: [usersTable.tableArn],
+        }),
+      ],
     });
 
-    // Grant Cognito permissions
-    loginFunction.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['cognito-idp:AdminInitiateAuth'],
-        resources: [
-          `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${userPool.userPoolId}`,
-        ],
-      })
-    );
-
-    const getTasksFunction = new lambda.Function(this, 'GetTasksFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'tasks.get',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
-      environment: commonEnv,
-      layers: [lambdaLayer],
-    });
-
-    // // Explicit permission for querying the Global Secondary Index (UserId-index) on tasksTable
-    // getTasksFunction.addToRolePolicy(
-    //   new iam.PolicyStatement({
-    //     actions: ['dynamodb:Query'],
-    //     resources: [
-    //       `arn:aws:dynamodb:${this.region}:${this.account}:table/${tasksTable.tableName}/index/userId`,
-    //       tasksTable.tableArn,
-    //       `${tasksTable.tableArn}/index/userId`,
-    //     ],
-    //   })
-    // );
-
-    const createTaskFunction = new lambda.Function(this, 'CreateTaskFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'tasks.create',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
-      environment: commonEnv,
-      layers: [lambdaLayer],
-    });
-
-    const updateTaskFunction = new lambda.Function(this, 'UpdateTaskFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'tasks.update',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
-      environment: commonEnv,
-      layers: [lambdaLayer],
-    });
-
-    const deleteTaskFunction = new lambda.Function(this, 'DeleteTaskFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'tasks.remove',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
-      environment: commonEnv,
-      layers: [lambdaLayer],
-    });
-
-    // Grant Lambda Functions permissions to DynamoDB
-    tasksTable.grantReadWriteData(getTasksFunction);
-    tasksTable.grantReadWriteData(createTaskFunction);
-    tasksTable.grantReadWriteData(updateTaskFunction);
-    tasksTable.grantReadWriteData(deleteTaskFunction);
-
-    usersTable.grantReadWriteData(registerFunction);
-    usersTable.grantReadWriteData(loginFunction);
-
-    // API Gateway
+    // 7. API Gateway to expose the endpoints
     const api = new apigateway.RestApi(this, 'TaskApi', {
-      restApiName: 'Task Management Service',
-      description: 'This service manages tasks.',
+      restApiName: 'Task Management API',
+      description: 'API for managing tasks and users',
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ['OPTIONS', 'GET', 'POST', 'PUT', 'DELETE'],
@@ -189,71 +133,52 @@ export class ServerlessTaskApiStack extends cdk.Stack {
       },
     });
 
-    // Cognito Authorizer
-    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(
-      this,
-      'CognitoAuthorizer',
-      {
-        cognitoUserPools: [userPool],
-      }
-    );
-
-    // Register Resource
-    const register = api.root.addResource('register');
-    register.addMethod(
+    // Register resource in the API Gateway
+    const registerResource = api.root.addResource('register');
+    registerResource.addMethod(
       'POST',
       new apigateway.LambdaIntegration(registerFunction)
     );
 
-    // Login Resource
-    const login = api.root.addResource('login');
-    login.addMethod('POST', new apigateway.LambdaIntegration(loginFunction));
+    // Login resource in the API Gateway
+    const loginResource = api.root.addResource('login');
+    loginResource.addMethod(
+      'POST',
+      new apigateway.LambdaIntegration(loginFunction)
+    );
 
-    // Tasks Resource
-    const tasks = api.root.addResource('tasks');
+    // // Add other resources and methods as needed (e.g., tasks, users)
+    // const tasksResource = api.root.addResource('tasks');
+    // tasksResource.addMethod(
+    //   'GET',
+    //   new apigateway.LambdaIntegration(/* your tasks Lambda */)
+    // );
 
-    // GET /tasks
-    tasks.addMethod('GET', new apigateway.LambdaIntegration(getTasksFunction), {
-      authorizer,
-      authorizationType: apigateway.AuthorizationType.COGNITO,
+    // const usersResource = api.root.addResource('users');
+    // usersResource.addMethod(
+    //   'GET',
+    //   new apigateway.LambdaIntegration(/* your users Lambda */)
+    // );
+
+    // 8. Add Permissions to the Lambda Role (if any further are needed)
+    // Example of adding a custom policy statement:
+    const additionalPolicy = new iam.PolicyStatement({
+      actions: ['dynamodb:PutItem', 'dynamodb:GetItem'],
+      resources: [usersTable.tableArn, tasksTable.tableArn],
     });
 
-    // POST /tasks
-    tasks.addMethod(
-      'POST',
-      new apigateway.LambdaIntegration(createTaskFunction),
-      {
-        authorizer,
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-      }
-    );
+    // Attach the policy to the register function
+    registerFunction.addToRolePolicy(additionalPolicy);
 
-    // Task by ID Resource
-    const task = tasks.addResource('{taskId}');
+    // 9. Outputs (optional)
+    new cdk.CfnOutput(this, 'UserPoolIdOutput', {
+      value: userPool.userPoolId,
+      description: 'The ID of the Cognito User Pool',
+    });
 
-    // PUT /tasks/{taskId}
-    task.addMethod(
-      'PUT',
-      new apigateway.LambdaIntegration(updateTaskFunction),
-      {
-        authorizer,
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-      }
-    );
-
-    // DELETE /tasks/{taskId}
-    task.addMethod(
-      'DELETE',
-      new apigateway.LambdaIntegration(deleteTaskFunction),
-      {
-        authorizer,
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-      }
-    );
-
-    // Output API URL
-    new cdk.CfnOutput(this, 'APIUrl', {
-      value: api.url ?? 'Something went wrong with the API deployment',
+    new cdk.CfnOutput(this, 'ApiUrl', {
+      value: api.url,
+      description: 'The URL of the API Gateway',
     });
   }
 }
