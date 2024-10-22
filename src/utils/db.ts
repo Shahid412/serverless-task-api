@@ -5,7 +5,7 @@ import { Task } from '../models/task';
 
 const dynamo = new DynamoDB.DocumentClient();
 
-const TABLE_NAME = process.env.TABLE_NAME || 'TasksTable';
+const TABLE_NAME = process.env.TABLE_NAME || 'tasks';
 
 /**
  * Creates a new task in DynamoDB.
