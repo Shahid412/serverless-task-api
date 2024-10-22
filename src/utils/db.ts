@@ -36,7 +36,6 @@ export const getTasksFromDB = async (userId: string): Promise<Task[]> => {
   };
 
   const result = await dynamo.query(params).promise();
-  console.log('result', result);
   return result.Items as Task[];
 };
 
@@ -51,19 +50,16 @@ export const updateTaskInDB = async (
   userId: string,
   updates: Partial<Task>
 ): Promise<void> => {
-  console.log(1);
   const updateExpressions: string[] = [];
   const expressionAttributeValues: Record<string, any> = {};
   const expressionAttributeNames: Record<string, string> = {};
 
-  console.log(2);
   Object.keys(updates).forEach((key, index) => {
     updateExpressions.push(`#${key} = :val${index}`);
     expressionAttributeValues[`:val${index}`] = (updates as any)[key];
     expressionAttributeNames[`#${key}`] = key;
   });
 
-  console.log(3);
   const params: DynamoDB.DocumentClient.UpdateItemInput = {
     TableName: TABLE_NAME,
     Key: {

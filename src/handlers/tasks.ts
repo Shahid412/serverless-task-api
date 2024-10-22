@@ -113,7 +113,6 @@ export const create = async (event: APIGatewayEvent) => {
 
 export const update = async (event: APIGatewayEvent) => {
   const token = event.headers.Authorization || event.headers.authorization;
-  console.log(11);
 
   if (!token) {
     console.log('Missing token!');
@@ -123,12 +122,10 @@ export const update = async (event: APIGatewayEvent) => {
     };
   }
 
-  console.log(22);
   try {
     const userId = getUserId(event);
     const taskId = event.pathParameters?.taskId;
 
-    console.log(33);
     if (!userId) {
       return {
         statusCode: 401,
@@ -136,7 +133,6 @@ export const update = async (event: APIGatewayEvent) => {
       };
     }
 
-    console.log(44);
     if (!taskId) {
       return {
         statusCode: 400,
@@ -144,10 +140,8 @@ export const update = async (event: APIGatewayEvent) => {
       };
     }
 
-    console.log(55);
     const existingTask: Task | null = await getTaskById(taskId, userId);
 
-    console.log(66);
     if (!existingTask) {
       return {
         statusCode: 404,
@@ -155,12 +149,10 @@ export const update = async (event: APIGatewayEvent) => {
       };
     }
 
-    console.log(77);
     const { title, description, status } = JSON.parse(event.body || '{}');
 
     const updates: Partial<Task> = {};
 
-    console.log(88);
     if (title) updates.title = title;
     if (description) updates.description = description;
     if (status) updates.status = status;
