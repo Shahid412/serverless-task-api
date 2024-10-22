@@ -67,7 +67,7 @@ Write-Host "---------------------------------------------------------------" -Fo
 Write-Host "STEP 4: Bootstrapping CDK (needed on first deployment)..." -ForegroundColor Cyan
 Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
 Write-Host "Bootstrapping is required only for the first deployment or when deploying in a new AWS account or region." -ForegroundColor Green
-Write-Host "It sets up necessary infrastructure (like S3 buckets) for AWS CDK to deploy your stack." -ForegroundColor Green
+Write-Host "It sets up necessary infrastructure (like S3 buckets) for AWS CDK to deploy the stack." -ForegroundColor Green
 
 $bootstrapNeeded = $true  # Change this to `$false` after first deployment
 
@@ -79,7 +79,7 @@ if ($bootstrapNeeded -eq $true) {
         bash -c "cdk bootstrap aws://{{aws-account-id}}/{{aws-region}}"
     }
 } else {
-    Write-Host "Skipping CDK Bootstrap as it's not needed for subsequent deployments."
+    Write-Host "Skipping CDK Bootstrap - not needed for subsequent deployments."
 }
 
 # ---------------------------------------------------------------
@@ -88,8 +88,8 @@ if ($bootstrapNeeded -eq $true) {
 Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
 Write-Host "STEP 5: Deploying the CDK stack to AWS..." -ForegroundColor Cyan
 Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
-Write-Host "This step deploys your stack to AWS using the CDK. It will check for any changes and apply them to your AWS environment." -ForegroundColor Green
-Write-Host "If changes are detected, they will be updated in your AWS environment." -ForegroundColor Green
+Write-Host "This step deploys your stack to AWS using the CDK. It will check for any changes and apply them to the AWS environment." -ForegroundColor Green
+Write-Host "If changes are detected, they will be updated in the AWS environment." -ForegroundColor Green
 
 Write-Host "Deploying..."
 if ($OS -eq "Windows_NT") {
@@ -101,4 +101,4 @@ if ($OS -eq "Windows_NT") {
 Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
 Write-Host "Deployment Complete!" -ForegroundColor Cyan
 Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
-Write-Host "Your application has been successfully deployed or updated on AWS." -ForegroundColor Green
+Write-Host "Application has been successfully deployed or updated on AWS." -ForegroundColor Green
