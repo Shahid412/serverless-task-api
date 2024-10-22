@@ -51,27 +51,31 @@ export const updateTaskInDB = async (
   userId: string,
   updates: Partial<Task>
 ): Promise<void> => {
+  console.log(1);
   const updateExpressions: string[] = [];
   const expressionAttributeValues: Record<string, any> = {};
   const expressionAttributeNames: Record<string, string> = {};
 
+  console.log(2);
   Object.keys(updates).forEach((key, index) => {
     updateExpressions.push(`#${key} = :val${index}`);
     expressionAttributeValues[`:val${index}`] = (updates as any)[key];
     expressionAttributeNames[`#${key}`] = key;
   });
 
+  console.log(3);
   const params: DynamoDB.DocumentClient.UpdateItemInput = {
     TableName: TABLE_NAME,
     Key: {
-      TaskId: taskId,
-      UserId: userId,
+      taskId: taskId,
+      userId: userId,
     },
     UpdateExpression: `SET ${updateExpressions.join(', ')}`,
     ExpressionAttributeValues: expressionAttributeValues,
     ExpressionAttributeNames: expressionAttributeNames,
   };
 
+  console.log('updateTaskInDB params:', params);
   await dynamo.update(params).promise();
 };
 
@@ -87,8 +91,8 @@ export const deleteTaskFromDB = async (
   const params: DynamoDB.DocumentClient.DeleteItemInput = {
     TableName: TABLE_NAME,
     Key: {
-      TaskId: taskId,
-      UserId: userId,
+      taskId: taskId,
+      userId: userId,
     },
   };
   await dynamo.delete(params).promise();
@@ -107,8 +111,8 @@ export const getTaskById = async (
   const params: DynamoDB.DocumentClient.GetItemInput = {
     TableName: TABLE_NAME,
     Key: {
-      TaskId: taskId,
-      UserId: userId,
+      taskId: taskId,
+      userId: userId,
     },
   };
   const result = await dynamo.get(params).promise();
