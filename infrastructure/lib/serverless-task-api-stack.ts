@@ -73,12 +73,13 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
     // Permissions to perform CRUD operations on tasks table
     const tasksDynamoPolicy = new iam.PolicyStatement({
       actions: [
+        'dynamodb:Query',
         'dynamodb:PutItem',
         'dynamodb:GetItem',
         'dynamodb:UpdateItem',
         'dynamodb:DeleteItem',
       ],
-      resources: [tasksTable.tableArn],
+      resources: [tasksTable.tableArn, `${tasksTable.tableArn}/index/userId`],
     });
 
     // Lambda Layer for shared code (optional)
