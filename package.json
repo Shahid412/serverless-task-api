@@ -10,8 +10,8 @@
     "test:watch": "jest --watch",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",
-    "deploy": "cd infrastructure && cdk deploy",
-    "deploy:ci": "cd infrastructure && cdk deploy --require-approval never",
+    "deploy": "powershell ./scripts/deploy.ps1",
+    "deploy:ci": "npm run clean && npm run build && cdk deploy --require-approval never --app 'npx ts-node infrastructure/bin/serverless-task-api.ts'",
     "clean": "rm -rf dist"
   },
   "keywords": [
