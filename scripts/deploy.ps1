@@ -74,9 +74,9 @@ $bootstrapNeeded = $true  # Change this to `$false` after first deployment
 Write-Host "Bootstrapping CDK..."
 if ($bootstrapNeeded -eq $true) {
     if ($OS -eq "Windows_NT") {
-        cdk bootstrap aws://219951072781/eu-north-1
+        cdk bootstrap aws://{{aws-account-id}}/{{aws-region}}
     } else {
-        bash -c "cdk bootstrap aws://219951072781/eu-north-1"
+        bash -c "cdk bootstrap aws://{{aws-account-id}}/{{aws-region}}"
     }
 } else {
     Write-Host "Skipping CDK Bootstrap as it's not needed for subsequent deployments."
