@@ -39,20 +39,6 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       },
     });
 
-    // // 2. Create a DynamoDB table for users
-    // const usersTable = new dynamodb.Table(this, 'UsersTable', {
-    //   partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
-    //   tableName: 'users',
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Not recommended for production use
-    // });
-
-    // // 3. Create a DynamoDB table for tasks
-    // const tasksTable = new dynamodb.Table(this, 'TasksTable', {
-    //   partitionKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
-    //   tableName: 'tasks',
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Not recommended for production use
-    // });
-
     // Referencing the existing DynamoDB Users Table
     const usersTable = dynamodb.Table.fromTableName(this, 'users', 'users');
 
@@ -68,7 +54,7 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       NODE_OPTIONS: '--enable-source-maps',
     };
 
-    // Cognito Admin Policy for Lambda functions
+    // Cognito Admin Policy for Lambda functions (handling user management)
     const cognitoAdminPolicy = new iam.PolicyStatement({
       actions: [
         'cognito-idp:AdminConfirmSignUp',
@@ -84,6 +70,17 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       ],
     });
 
+    // Permissions to perform CRUD operations on tasks table
+    const tasksDynamoPolicy = new iam.PolicyStatement({
+      actions: [
+        'dynamodb:PutItem',
+        'dynamodb:GetItem',
+        'dynamodb:UpdateItem',
+        'dynamodb:DeleteItem',
+      ],
+      resources: [tasksTable.tableArn],
+    });
+
     // Lambda Layer for shared code (optional)
     const lambdaLayer = new lambda.LayerVersion(this, 'LambdaLayer', {
       code: lambda.Code.fromAsset(path.join(__dirname, '../../dist')),
@@ -91,7 +88,7 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       description: 'A layer to hold common utilities',
     });
 
-    // 5. Register Lambda function
+    // 5. Register Lambda function (public route, no authentication required)
     const registerFunction = new lambda.Function(this, 'RegisterFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'auth.register',
@@ -101,13 +98,13 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       initialPolicy: [
         cognitoAdminPolicy,
         new iam.PolicyStatement({
-          actions: ['dynamodb:*'],
-          resources: [usersTable.tableArn, tasksTable.tableArn],
+          actions: ['dynamodb:PutItem'],
+          resources: [usersTable.tableArn],
         }),
       ],
     });
 
-    // 6. Login Lambda function
+    // 6. Login Lambda function (public route, no authentication required)
     const loginFunction = new lambda.Function(this, 'LoginFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'auth.login',
@@ -133,42 +130,111 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
       },
     });
 
-    // Register resource in the API Gateway
+    // Public routes for register and login (no auth)
     const registerResource = api.root.addResource('register');
     registerResource.addMethod(
       'POST',
       new apigateway.LambdaIntegration(registerFunction)
     );
 
-    // Login resource in the API Gateway
     const loginResource = api.root.addResource('login');
     loginResource.addMethod(
       'POST',
       new apigateway.LambdaIntegration(loginFunction)
     );
 
-    // // Add other resources and methods as needed (e.g., tasks, users)
-    // const tasksResource = api.root.addResource('tasks');
-    // tasksResource.addMethod(
-    //   'GET',
-    //   new apigateway.LambdaIntegration(/* your tasks Lambda */)
-    // );
+    // 8. Task CRUD Lambda Functions (protected routes with Cognito authentication)
 
-    // const usersResource = api.root.addResource('users');
-    // usersResource.addMethod(
-    //   'GET',
-    //   new apigateway.LambdaIntegration(/* your users Lambda */)
-    // );
-
-    // 8. Add Permissions to the Lambda Role (if any further are needed)
-    // Example of adding a custom policy statement:
-    const additionalPolicy = new iam.PolicyStatement({
-      actions: ['dynamodb:PutItem', 'dynamodb:GetItem'],
-      resources: [usersTable.tableArn, tasksTable.tableArn],
+    // Get all tasks
+    const getTasksFunction = new lambda.Function(this, 'GetTasksFunction', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'tasks.get',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
+      environment: commonEnv,
+      layers: [lambdaLayer],
+      initialPolicy: [tasksDynamoPolicy],
     });
 
-    // Attach the policy to the register function
-    registerFunction.addToRolePolicy(additionalPolicy);
+    // Create a new task
+    const createTaskFunction = new lambda.Function(this, 'CreateTaskFunction', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'tasks.create',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
+      environment: commonEnv,
+      layers: [lambdaLayer],
+      initialPolicy: [tasksDynamoPolicy],
+    });
+
+    // Update an existing task
+    const updateTaskFunction = new lambda.Function(this, 'UpdateTaskFunction', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'tasks.update',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
+      environment: commonEnv,
+      layers: [lambdaLayer],
+      initialPolicy: [tasksDynamoPolicy],
+    });
+
+    // Delete a task
+    const deleteTaskFunction = new lambda.Function(this, 'DeleteTaskFunction', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'tasks.remove',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../dist/handlers')),
+      environment: commonEnv,
+      layers: [lambdaLayer],
+      initialPolicy: [tasksDynamoPolicy],
+    });
+
+    // Cognito Authorizer (for securing API routes)
+    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(
+      this,
+      'CognitoAuthorizer',
+      {
+        cognitoUserPools: [userPool],
+      }
+    );
+
+    // Tasks Resource
+    const tasks = api.root.addResource('tasks');
+
+    // GET /tasks - Requires Cognito Authorization
+    tasks.addMethod('GET', new apigateway.LambdaIntegration(getTasksFunction), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /tasks - Requires Cognito Authorization
+    tasks.addMethod(
+      'POST',
+      new apigateway.LambdaIntegration(createTaskFunction),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      }
+    );
+
+    // Individual Task Resource by {taskId}
+    const task = tasks.addResource('{taskId}');
+
+    // PUT /tasks/{taskId} - Update a task (with Cognito)
+    task.addMethod(
+      'PUT',
+      new apigateway.LambdaIntegration(updateTaskFunction),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      }
+    );
+
+    // DELETE /tasks/{taskId} - Delete a task (with Cognito)
+    task.addMethod(
+      'DELETE',
+      new apigateway.LambdaIntegration(deleteTaskFunction),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      }
+    );
 
     // 9. Outputs (optional)
     new cdk.CfnOutput(this, 'UserPoolIdOutput', {
@@ -179,6 +245,41 @@ export class ServerlessTaskApiStack2 extends cdk.Stack {
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url,
       description: 'The URL of the API Gateway',
+    });
+
+    // Listing all endpoints
+    new cdk.CfnOutput(this, 'RegisterEndpoint', {
+      value: `${api.url}register`,
+      description: 'Endpoint for user registration (POST)',
+    });
+
+    new cdk.CfnOutput(this, 'LoginEndpoint', {
+      value: `${api.url}login`,
+      description: 'Endpoint for user login (POST)',
+    });
+
+    new cdk.CfnOutput(this, 'GetTasksEndpoint', {
+      value: `${api.url}tasks`,
+      description:
+        'Endpoint for fetching all tasks (GET) - Requires Cognito Authentication',
+    });
+
+    new cdk.CfnOutput(this, 'CreateTaskEndpoint', {
+      value: `${api.url}tasks`,
+      description:
+        'Endpoint for creating a task (POST) - Requires Cognito Authentication',
+    });
+
+    new cdk.CfnOutput(this, 'UpdateTaskEndpoint', {
+      value: `${api.url}tasks/{taskId}`,
+      description:
+        'Endpoint for updating a task (PUT) - Requires Cognito Authentication',
+    });
+
+    new cdk.CfnOutput(this, 'DeleteTaskEndpoint', {
+      value: `${api.url}tasks/{taskId}`,
+      description:
+        'Endpoint for deleting a task (DELETE) - Requires Cognito Authentication',
     });
   }
 }
