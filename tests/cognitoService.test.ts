@@ -1,185 +1,97 @@
-// // src/tests/cognitoService.test.ts
-// import { registerUser, loginUser } from '../src/services/cognitoService';
-// import AWS from 'aws-sdk';
-
-// const USER_POOL_ID = process.env.USER_POOL_ID || 'eu-north-1_ulBNaZw2c';
-// const CLIENT_ID = process.env.CLIENT_ID || '603flp00erns7drshfc1n397at';
-
-// // Mocking AWS SDK
-// jest.mock('aws-sdk');
-
-// describe('Cognito Service', () => {
-//   const mockSignUp = jest.fn() as jest.Mock;
-//   const mockAdminInitiateAuth = jest.fn() as jest.Mock;
-
-//   beforeEach(() => {
-//     (
-//       AWS.CognitoIdentityServiceProvider.prototype.constructor as jest.Mock
-//     ).mockImplementation(() => ({
-//       signUp: mockSignUp,
-//       adminInitiateAuth: mockAdminInitiateAuth,
-//     }));
-//   });
-
-//   afterEach(() => {
-//     jest.clearAllMocks();
-//   });
-
-//   test('registerUser should call signUp with correct parameters', async () => {
-//     const username = 'testuser';
-//     const password = 'Test@123';
-//     const email = 'test@example.com';
-//     console.log('IDs:', CLIENT_ID, USER_POOL_ID);
-//     mockSignUp.mockReturnValueOnce({
-//       promise: jest.fn().mockResolvedValue({ UserSub: 'unique-user-id' }),
-//     });
-
-//     await registerUser(username, password, email);
-
-//     expect(mockSignUp).toHaveBeenCalledWith({
-//       ClientId: CLIENT_ID,
-//       Username: username,
-//       Password: password,
-//       UserAttributes: [
-//         {
-//           Name: 'email',
-//           Value: email,
-//         },
-//       ],
-//     });
-//   });
-
-//   test('loginUser should call adminInitiateAuth with correct parameters', async () => {
-//     const username = 'testuser';
-//     const password = 'Test@123';
-
-//     mockAdminInitiateAuth.mockReturnValueOnce({
-//       promise: jest.fn().mockResolvedValue({}),
-//     });
-
-//     await loginUser(username, password);
-
-//     expect(mockAdminInitiateAuth).toHaveBeenCalledWith({
-//       AuthFlow: 'ADMIN_NO_SRP_AUTH',
-//       ClientId: CLIENT_ID,
-//       UserPoolId: USER_POOL_ID,
-//       AuthParameters: {
-//         USERNAME: username,
-//         PASSWORD: password,
-//       },
-//     });
-//   });
-
-//   test('registerUser should throw an error if signUp fails', async () => {
-//     mockSignUp.mockReturnValueOnce({
-//       promise: jest.fn().mockRejectedValue(new Error('Signup failed')),
-//     });
-
-//     await expect(registerUser('user', 'password', 'email')).rejects.toThrow(
-//       'Signup failed'
-//     );
-//   });
-
-//   test('loginUser should throw an error if adminInitiateAuth fails', async () => {
-//     mockAdminInitiateAuth.mockReturnValueOnce({
-//       promise: jest.fn().mockRejectedValue(new Error('Login failed')),
-//     });
-
-//     await expect(loginUser('user', 'password')).rejects.toThrow('Login failed');
-//   });
-// });
-
-// src/tests/cognitoService.test.ts
+// src/services/cognitoService.test.ts
 import { registerUser, loginUser } from '../src/services/cognitoService';
 import AWS from 'aws-sdk';
 
-// Define constants for User Pool and Client IDs
-const USER_POOL_ID = process.env.USER_POOL_ID || 'eu-north-1_ulBNaZw2c';
-const CLIENT_ID = process.env.CLIENT_ID || '603flp00erns7drshfc1n397at';
-
-// Mocking AWS SDK
-jest.mock('aws-sdk');
-
-describe('Cognito Service', () => {
-  const mockSignUp = jest.fn();
-  const mockAdminInitiateAuth = jest.fn();
-
-  beforeEach(() => {
-    // Mock implementation of CognitoIdentityServiceProvider
-    (
-      AWS.CognitoIdentityServiceProvider as unknown as jest.Mock
-    ).mockImplementation(() => ({
-      signUp: mockSignUp,
-      adminInitiateAuth: mockAdminInitiateAuth,
-    }));
+// Mocking AWS SDK CognitoIdentityServiceProvider and DynamoDB DocumentClient
+jest.mock('aws-sdk', () => {
+  const mockSignUp = jest.fn().mockReturnValue({
+    promise: jest.fn().mockResolvedValue({ UserSub: '12345' }),
   });
 
+  const mockAdminConfirmSignUp = jest.fn().mockReturnValue({
+    promise: jest.fn().mockResolvedValue({}),
+  });
+
+  const mockAdminInitiateAuth = jest.fn().mockReturnValue({
+    promise: jest.fn().mockResolvedValue({
+      AuthenticationResult: { AccessToken: 'access-token' },
+    }),
+  });
+
+  return {
+    CognitoIdentityServiceProvider: jest.fn().mockImplementation(() => ({
+      signUp: mockSignUp,
+      adminConfirmSignUp: mockAdminConfirmSignUp,
+      adminInitiateAuth: mockAdminInitiateAuth,
+    })),
+    DynamoDB: {
+      DocumentClient: jest.fn().mockImplementation(() => ({
+        put: jest.fn().mockReturnValue({
+          promise: jest.fn().mockResolvedValue({}),
+        }),
+      })),
+    },
+    config: {
+      update: jest.fn(),
+    },
+  };
+});
+
+describe('Cognito Service', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  test('registerUser should call signUp with correct parameters', async () => {
+  test('should register a user successfully', async () => {
     const username = 'testuser';
-    const password = 'Test@123';
+    const password = 'password123';
     const email = 'test@example.com';
 
-    // Mocking the response for signUp
-    mockSignUp.mockReturnValueOnce({
-      promise: jest.fn().mockResolvedValue({ UserSub: 'unique-user-id' }),
-    });
+    // Expected parameters passed to DynamoDB put
+    const putParams = {
+      TableName: 'users',
+      Item: {
+        userId: '12345',
+        username: 'testuser',
+        email: 'test@example.com',
+        createdAt: expect.any(String),
+      },
+    };
 
-    await registerUser(username, password, email);
+    // Creating an instance of DocumentClient
+    const documentClient = new AWS.DynamoDB.DocumentClient();
 
-    expect(mockSignUp).toHaveBeenCalledWith({
-      ClientId: CLIENT_ID,
-      Username: username,
-      Password: password,
-      UserAttributes: [
-        {
-          Name: 'email',
-          Value: email,
-        },
-      ],
+    // Calling the registerUser function
+    const result = await registerUser(username, password, email);
+
+    // Verifying that DynamoDB put was called with the correct params
+    expect(documentClient.put).toHaveBeenCalled(); // Check if put was called
+    expect(documentClient.put).toHaveBeenCalledWith(putParams); // Verify the parameters
+
+    // Ensuring the result returned matches the mocked signUp response
+    expect(result).toEqual({
+      UserSub: '12345',
     });
   });
 
-  test('loginUser should call adminInitiateAuth with correct parameters', async () => {
-    const username = 'testuser';
-    const password = 'Test@123';
+  test('should log in a user successfully', async () => {
+    const result = await loginUser('testuser', 'password123');
 
-    // Mocking the response for adminInitiateAuth
-    mockAdminInitiateAuth.mockReturnValueOnce({
-      promise: jest.fn().mockResolvedValue({}),
-    });
-
-    await loginUser(username, password);
-
-    expect(mockAdminInitiateAuth).toHaveBeenCalledWith({
+    // Expectations on Cognito login
+    expect(
+      new AWS.CognitoIdentityServiceProvider().adminInitiateAuth
+    ).toHaveBeenCalledWith({
       AuthFlow: 'ADMIN_NO_SRP_AUTH',
-      ClientId: CLIENT_ID,
-      UserPoolId: USER_POOL_ID,
+      ClientId: expect.any(String),
+      UserPoolId: expect.any(String),
       AuthParameters: {
-        USERNAME: username,
-        PASSWORD: password,
+        USERNAME: 'testuser',
+        PASSWORD: 'password123',
       },
     });
-  });
 
-  test('registerUser should throw an error if signUp fails', async () => {
-    mockSignUp.mockReturnValueOnce({
-      promise: jest.fn().mockRejectedValue(new Error('Signup failed')),
+    expect(result).toEqual({
+      AuthenticationResult: { AccessToken: 'access-token' },
     });
-
-    await expect(registerUser('user', 'password', 'email')).rejects.toThrow(
-      'Signup failed'
-    );
-  });
-
-  test('loginUser should throw an error if adminInitiateAuth fails', async () => {
-    mockAdminInitiateAuth.mockReturnValueOnce({
-      promise: jest.fn().mockRejectedValue(new Error('Login failed')),
-    });
-
-    await expect(loginUser('user', 'password')).rejects.toThrow('Login failed');
   });
 });

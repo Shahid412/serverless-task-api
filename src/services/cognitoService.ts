@@ -1,10 +1,10 @@
 // src/services/cognitoService.ts
 import AWS from 'aws-sdk';
 
-const region: string = process.env.AWS_REGION || 'eu-north-1';
-const userPoolId: string = process.env.USER_POOL_ID || 'eu-north-1_ulBNaZw2c';
-const clientId: string = process.env.CLIENT_ID || '603flp00erns7drshfc1n397at';
-const dynamoDbTable: string = process.env.USERS_TABLE_NAME || 'users';
+const region: string = process.env.AWS_REGION || '';
+const userPoolId: string = process.env.USER_POOL_ID || '';
+const clientId: string = process.env.CLIENT_ID || '';
+const dynamoDbTable: string = process.env.USERS_TABLE_NAME || '';
 
 // Configuring the AWS SDK with region
 AWS.config.update({ region: region });
@@ -12,7 +12,7 @@ AWS.config.update({ region: region });
 const cognito = new AWS.CognitoIdentityServiceProvider();
 const dynamoDb = new AWS.DynamoDB.DocumentClient(); // DynamoDB Client
 
-// Register User in Cognito and Store in DynamoDB
+// Registering User in Cognito and Store in DynamoDB
 export const registerUser = async (
   username: string,
   password: string,
@@ -90,7 +90,6 @@ export const loginUser = async (username: string, password: string) => {
   };
 
   try {
-    console.log('params:', params);
     const response = await cognito.adminInitiateAuth(params).promise();
     console.log('Cognito login response:', response);
     return response;
